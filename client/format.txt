@@ -1,0 +1,3 @@
+\n%{speed_download}\n
+%{time_connect}\n
+%{time_starttransfer}\n
