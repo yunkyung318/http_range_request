@@ -1,111 +1,96 @@
 import os
 import sys
-
-command = " "
+import subprocess
+import threading
 
 data1 = " "
 data2 = " "
 
+system = 0
+
 start = 0
-chunk = 1000 #default chunk suze
+end = 1000000
+chunk1 = 1000000 #default chunk suze
+chunk2 = 1000000
 
-ip1 = "169.254.173.173"
-ip2 = "169.254.219.127"
+file_size = 0
+buf = None
+buf_buf = " "
 
-def throughput(chunk, rtt) :
-    throughput = chunk / rtt
-    return throughput
+ip1 = "192.168.200.17"  #wlan1
+ip2 = "192.168.100.17"  #wlan0
 
-command = "sudo curl -w \"@format.txt\" --interface "+ip1+" http://169.254.22.166:8000"
-ip1_rtt = os.popen(command).read()
-ip1_rtt = ip1_rtt.split()
-print(ip1_rtt)
-file_size = ip1_rtt[0]
-chunk = sys.getsizeof(file_size)
+os.system('touch video.mp4')
 
-ip1_rtt = float(ip1_rtt[2])
-ip1_throughput = throughput(chunk,ip1_rtt)
+def command(ip) :
+    command = "sudo curl --interface "+ip+" http://169.254.22.166:8000"
+    return os.popen(command).read()
 
-print(chunk)
-print(file_size)
-print(ip1_rtt)
-print(ip1_throughput)
-"""
-command = "sudo curl -w \"format.txt\" --interface "+ip2+" http://169.254.22.166:8000"
-ip1_rtt = os.popen(command).read()
-ip1_rtt = ip1_rtt.split()
-file_size = ip1_rtt[0]
-ip1_rtt = ip1_rtt[2]
+def range_command(ip, chunk) :
+    global start, end
 
-print(file_size)
-print(ip1_rtt)
-command = "sudo curl --interface "+ip1+" http://169.254.22.166:8000/text -H \"Range: "+str(start)+"-"+str(50000)+"\""
-read_data = os.popen(command).read()
-read_data = read_data.split()
+    print("start", start)
+    print("end", end)
+    print("chunk", chunk)
 
-file_len = int(read_data[0])
-data1 = read_data[1]
+    command = "sudo curl -w \"@format.txt\" --interface "+ip+" http://169.254.22.166:8000/video -H \"Range: "+str(start)+"-"+str(end)+"\" -o buf.mp4"
+    
+    start = end + 1
+    end += chunk + 1
+    
+    if end == int(file_size) :
+        pass
+    elif end == int(file_size) or end >= int(file_size) :
+        end = int(file_size)
+        system = 1
 
-start = 50000 + 1
-end = file_len
+    throughput = os.popen(command).read()
 
-print("dd")
-command = "sudo curl --interface "+ip2+" http://169.254.22.166:8000/text -H \"Range: "+str(start)+"-"+str(50000)+"\""
+    result = subprocess.check_output("cat buf.mp4", shell=True)
+    return result, throughput, chunk
 
-read_data2 = os.popen(command).read()
-read_data2 = read_data2.split()
+file_size = command(ip1)
+i=0
 
-file_len2 = int(read_data2[0])
-data2 = read_data2[1]
+while 1 :
+    buf = None
+    buf_buf = ""
 
-buf = data1 + data2
+    print("----------------------------------------------------------------")
+    
+    ip1_data, ip1_throughput, chunk1 = range_command(ip1, chunk1)
+    print("wlan0 throughput : ", ip1_throughput)
 
-os.system('touch download.txt')
-os.system('echo %s >> download.txt'%buf)
-"""
-"""
-if start == 0 :
-        start = end+1
-        end = file_len-1
+    ip2_data, ip2_throughput, chunk2 = range_command(ip2, chunk2)
+    print("wlan1 throughput : ", ip2_throughput)
 
-        command = "curl "+ip+":8000/"+file_type+" -H \"Range: "+str(start)+"-"+str(end)+"\""
+    buf_buf = ip1_data + ip2_data
+    
+    #if buf == None : 
+    buf = buf_buf
+    #else : 
+    #    buf += buf_buf
+    
+    with open("video.mp4", "ab") as f:
+        f.write(buf)
+    
+    if system == 1 :
+        os.exit()
 
-        read_data_2 = os.popen(command).read()
-        read_data_2 = read_data_2.split()
-
-        data2 = read_data_2[1]
-
-        buf = data1 + data2
-
-        os.system('touch %s.txt'%file_type)
-        os.system('echo %s >> text.txt'%buf)
-
-    elif start > 0 :
-        # 1 curl
-        start1 = 0
-        end1 = start-1
-
-        command = "curl "+ip+":8000/"+file_type+" -H \"Range: "+str(start1)+"-"+str(end1)+"\""
-        read_data_2 = os.popen(command).read()
-        read_data_2 = read_data_2.split()
-
-        data2 = read_data_2[1]
-
-        # 3 curl
-
-        start2 = end+1
-        end2 = file_len-1
-
-        command = "curl "+ip+":8000/"+file_type+" -H \"Range: "+str(start2)+"-"+str(end2)+"\""
-        read_data_3 = os.popen(command).read()
-        read_data_3 = read_data_3.split()
-
-        data3 = read_data_3[1]
-
-        buf = data2 + data1 + data3
-
-        os.system('touch %s.txt'%file_type)
-        os.system('echo %s >> %s.txt'%(buf,file_type))
+    chunk1 = 100000 #default chunk suze
+    chunk2 = 100000
+    
+    if int(ip1_throughput) > int(ip2_throughput) :
+        result = int(ip1_throughput) // int(ip2_throughput)
+        print(result)
+        chunk1 = chunk1 * result
+        print("chunk1 ",chunk1)
     else :
-        exit()
-    """
+        result = int(ip2_throughput) // int(ip1_throughput)
+        print(result)
+        chunk2 = chunk2 * result
+        print("chunk2 ",chunk2)
+
+    print("----------------------------------------------------------------")
+    #i+=1
+
