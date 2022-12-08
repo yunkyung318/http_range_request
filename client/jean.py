@@ -3,6 +3,7 @@ import sys
 import subprocess
 import math
 import time
+import threading
 
 ip1_data = " "
 ip2_data = " "
@@ -22,23 +23,6 @@ ip2 = "192.168.2.43"  #wlan1, 5G
 
 os.system('touch video.mp4')
 
-def check_end() :
-    global chunk1, chunk2
-
-    if system == 1 :
-        if chunk1 > chunk2 :
-            ip1_data, ip1_throughput, chunk1 = range_command(ip1, chunk1)
-            with open("video.mp4", "ab") as f:
-                f.write(ip1_data)
-            os.exit()
-        elif chunk2 > chunk1 :
-            ip2_data, ip2_throughput, chunk2 = range_command(ip2, chunk2)
-            with open("video.mp4", "ab") as f:
-                f.write(ip2_data)
-            os.exit()
-        else :
-            pass
-
 def command(ip) :
     command = "sudo curl --interface "+ip+" "+server
     return os.popen(command).read()
@@ -46,26 +30,14 @@ def command(ip) :
 def range_command(ip, chunk) :
     global start, end, system
    
-    #if start != 0 :
-     #   start = end + 1
-     #   end += chunk + 1
-    
     if end > int(file_size) :
         end = int(file_size)
         system = 2  
- 
-    #if system == 1 :
-    #    end = int(file_size)
-   
-    #print("start", start)
-    #print("chunk", chunk)
-    #print("end", end)
     
-    command = "sudo curl -w \"@format.txt\" --interface "+ip+" "+server+"/video -H \"Range: "+str(start)+"-"+str(end)+"\" -o buf.mp4"
-    
-    #if start == 0 :
     start = end + 1
     end += chunk + 1
+
+    command = "sudo curl -w \"@format.txt\" --interface "+ip+" "+server+"/video -H \"Range: "+str(start)+"-"+str(end)+"\" -o buf.mp4"
     
     throughput = os.popen(command).read()
 
@@ -73,46 +45,35 @@ def range_command(ip, chunk) :
     return result, throughput, chunk
 
 file_size = command(ip1)
-#print(file_size)
 while 1 :
     file_byte = os.path.getsize('./video.mp4')
     print('[FILE SIZE : ', file_byte, ']')
+    
     buf = None
 
     print("----------------------------------------------------------------")
     
     ip1_data, ip1_throughput, chunk1 = range_command(ip1, chunk1)
-    #check_end()
     
     if system == 2 :
         with open("video.mp4", "ab") as f:
             buf = ip1_data
             f.write(buf)
-            #print("끝1",end)
         os.exit()
 
     ip2_data, ip2_throughput, chunk2 = range_command(ip2, chunk2)
-    #check_end()
 
     if system == 2 :
         with open("video.mp4", "ab") as f:
             buf = ip1_data + ip2_data
             f.write(buf)
-            #print("끝 2",end)
         os.exit()
 
     buf = ip1_data + ip2_data
     
     with open("video.mp4", "ab") as f:
         f.write(buf)
-        #print(end)
      
-    #if end == int(file_size) :
-    #    pass
-    #elif end >= int(file_size) :
-    #    end = int(file_size)
-    #    system = system + 1
-
     chunk1 = 1000000 #default chunk suze
     chunk2 = 1000000
     
@@ -128,3 +89,28 @@ while 1 :
         print("wlan1 의 변경된 chunk2 ",chunk2)
 
     print("----------------------------------------------------------------")
+
+def test(ip) :
+    chunk1 = 1000000 #default chunk suze
+    chunk2 = 1000000
+    
+    if int(ip1_throughput) > int(ip2_throughput) :
+        result = int(ip1_throughput) / int(ip2_throughput)
+        result = math.ceil(result)
+        chunk1 = chunk1 * result
+        print("wlan0 의 변경된 chunk1",chunk1)
+    else :
+        result = int(ip2_throughput) / int(ip1_throughput)
+        result = math.ceil(result)
+        chunk2 = chunk2 * result
+        print("wlan1 의 변경된 chunk2 ",chunk2)
+
+    file_byte = os.path.getsize('./video.mp4')
+    print('[FILE SIZE : ', file_byte, ']')
+    
+    buf = None
+
+    threading.Timer(0, test(ip1)).start()
+    threading.Timer(0, test(ip2)).start()
+
+test()
